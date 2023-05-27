@@ -76,7 +76,7 @@ io_connect_t _io_spawn_client(void *dict, size_t dictlen)
     kern_return_t ret = io_service_open_extended(_io_get_service(), mach_task_self(), 0, NDR_record, dict, dictlen, &err, &client);
     if(ret != KERN_SUCCESS || err != KERN_SUCCESS || !MACH_PORT_VALID(client))
     {
-        //ERR("Failed to parse dictionary (client = 0x%08x, ret = %u: %s, err = %u: %s)", client, ret, mach_error_string(ret), err, mach_error_string(err));
+        ERR("Failed to parse dictionary (client = 0x%08x, ret = %u: %s, err = %u: %s)", client, ret, mach_error_string(ret), err, mach_error_string(err));
     }
     return client;
 }
@@ -88,7 +88,7 @@ io_iterator_t _io_iterator(void)
     kern_return_t ret = IORegistryEntryCreateIterator(_io_get_service(), "IOService", kIORegistryIterateRecursively, &it);
     if(ret != KERN_SUCCESS)
     {
-        //ERR("Failed to create iterator (ret = %u: %s)", ret, mach_error_string(ret));
+        ERR("Failed to create iterator (ret = %u: %s)", ret, mach_error_string(ret));
     }
     return it;
 }
@@ -148,7 +148,7 @@ void _io_release_client(io_connect_t client)
     kern_return_t ret = IOServiceClose(client);
     if(ret != KERN_SUCCESS)
     {
-        //ERROR("Failed to release user client (ret = %u: %s)", ret, mach_error_string(ret));
+        ERR("Failed to release user client (ret = %u: %s)", ret, mach_error_string(ret));
     }
 }
 
@@ -166,7 +166,7 @@ void dict_get_bytes(void *dict, size_t dictlen, const char *key, void *buf, uint
         _io_release_client(client);
     }
     // Async cleanup
-    TIMER_SLEEP_UNTIL(timer, 50e6); // 50ms
+    TIMER_SLEEP_UNTIL(timer, 10e6); // 10ms
 }
 
 void dict_parse(void *dict, size_t dictlen)
@@ -174,7 +174,7 @@ void dict_parse(void *dict, size_t dictlen)
     TIMER_START(timer);
     _io_release_client(_io_spawn_client(dict, dictlen));
     // Async cleanup
-    TIMER_SLEEP_UNTIL(timer, 50e6); // 50ms
+    TIMER_SLEEP_UNTIL(timer, 10e6); // 10ms
 }
 
 static io_service_t _io_spawn_service(void *dict, size_t dictlen)
@@ -186,7 +186,7 @@ static io_service_t _io_spawn_service(void *dict, size_t dictlen)
     kern_return_t ret = io_service_open_extended(service, mach_task_self(), 0, NDR_record, dict, dictlen, &err, &client);
     if(ret != KERN_SUCCESS || err != KERN_SUCCESS || !MACH_PORT_VALID(client))
     {
-        //ERR("Failed to parse dictionary (client = 0x%08x, ret = %u: %s, err = %u: %s)", client, ret, mach_error_string(ret), err, mach_error_string(err));
+        ERR("Failed to parse dictionary (client = 0x%08x, ret = %u: %s, err = %u: %s)", client, ret, mach_error_string(ret), err, mach_error_string(err));
     }
     return service;
 }
@@ -197,6 +197,6 @@ io_service_t dict_parse_service(void *dict, size_t dictlen)
     //_io_release_client(_io_spawn_service(dict, dictlen));
     io_service_t service = _io_spawn_service(dict, dictlen);
     // Async cleanup
-    TIMER_SLEEP_UNTIL(timer, 50e6); // 50ms
+    TIMER_SLEEP_UNTIL(timer, 10e6); // 10ms
     return service;
 }

