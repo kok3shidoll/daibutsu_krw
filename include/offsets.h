@@ -16,8 +16,6 @@ enum koffsets {
     off_copyin,                 // _copyin
     off_bx_lr,                  // ret
     off_vm_kernel_addrperm,     // vm_kernel_addrperm
-    off_flush_dcache,           // flush_dcache
-    off_invalidate_tlb,         // invalidate_tlb
     off_current_task,           // current_task
     off_ipc_port_make_send,     // ipc_port_make_send
     off_ipc_port_copyout_send,  // ipc_port_copyout_send

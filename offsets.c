@@ -23,8 +23,6 @@ static addr_t koffsets_S5L895xX_12H321[] =
     0x800B486C, // _copyin
     0x800C75F6, // BX LR
     0x803F9258, // vm_kernel_addrperm
-    0x800A8758, // flush_dcache
-    0x800B4600, // invalidate_tlb
     0x8003a3f1, // current_task
     0x80016275, // ipc_port_make_send
     0x800162fd, // ipc_port_copyout_send
@@ -50,8 +48,6 @@ static addr_t koffsets_S5L894xX_12H321[] =
     0x800B2744, // _copyin
     0x800C471A, // BX LR
     0x803F4128, // vm_kernel_addrperm
-    0x800A7D10, // flush_dcache
-    0x800B24E0, // invalidate_tlb
     0x41414141, // current_task
     0x42424242, // ipc_port_make_send
     0x43434343, // ipc_port_copyout_send
