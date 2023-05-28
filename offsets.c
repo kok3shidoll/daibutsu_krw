@@ -489,7 +489,7 @@ static addr_t S5L8940X_12A365[] =
     0x00000010, // KSTRUCT_OFFSET_PIPE_BUFFER
 };
 
-static bool offsets_initialize(void)
+bool offsets_initialize(void)
 {
     static bool init = false;
     
