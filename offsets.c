@@ -76,7 +76,7 @@ static addr_t S5L8950X_12H143[] =
     0x800c75f5, // bufattr_cpx
     0x803b2cdc, // clock_ops
     0x800b486c, // copyin
-    0x800c75f6, // bx_lr
+    0x800c75f7, // bx_lr
     0x803f9258, // vm_kernel_addrperm
     0x8003a3f1, // current_task
     0x80016275, // ipc_port_make_send
@@ -101,7 +101,7 @@ static addr_t S5L8940X_12H143[] =
     0x800c46f9, // bufattr_cpx
     0x803adcdc, // clock_ops
     0x800b2724, // copyin
-    0x800c46fa, // bx_lr
+    0x800c46fb, // bx_lr
     0x803f4128, // vm_kernel_addrperm
     0x80039f2d, // current_task
     0x80016079, // ipc_port_make_send
@@ -129,7 +129,7 @@ static addr_t S5L8950X_12F69[] =
     0x800c75f5, // bufattr_cpx
     0x803b2cdc, // clock_ops
     0x800b484c, // copyin
-    0x800c75f6, // bx_lr
+    0x800c75f7, // bx_lr
     0x803f9254, // vm_kernel_addrperm
     0x8003a191, // current_task
     0x80016255, // ipc_port_make_send
@@ -154,7 +154,7 @@ static addr_t S5L8940X_12F69[] =
     0x800c46f9, // bufattr_cpx
     0x803adcdc, // clock_ops
     0x800b2724, // copyin
-    0x800c46fa, // bx_lr
+    0x800c46fb, // bx_lr
     0x803f4124, // vm_kernel_addrperm
     0x80039c5d, // current_task
     0x80016039, // ipc_port_make_send
@@ -182,7 +182,7 @@ static addr_t S5L8950X_12D508[] =
     0x800c4825, // bufattr_cpx
     0x803a5ce0, // clock_ops
     0x800b186c, // copyin
-    0x800c4826, // bx_lr
+    0x800c4827, // bx_lr
     0x803ec200, // vm_kernel_addrperm
     0x80038089, // current_task
     0x80015221, // ipc_port_make_send
@@ -207,7 +207,7 @@ static addr_t S5L8940X_12D508[] =
     0x800c18f9, // bufattr_cpx
     0x8039fce0, // clock_ops
     0x800af744, // copyin
-    0x800c18fa, // bx_lr
+    0x800c18fb, // bx_lr
     0x803e60d0, // vm_kernel_addrperm
     0x80037ab5, // current_task
     0x80014f7d, // ipc_port_make_send
@@ -235,7 +235,7 @@ static addr_t S5L8950X_12B466[] =
     0x800c14c5, // bufattr_cpx
     0x803a2ce0, // clock_ops
     0x800ae86c, // copyin
-    0x800c14c6, // bx_lr
+    0x800c14c7, // bx_lr
     0x803e9208, // vm_kernel_addrperm
     0x80038bd5, // current_task
     0x80014f19, // ipc_port_make_send
@@ -260,7 +260,7 @@ static addr_t S5L8940X_12B466[] =
     0x800be589, // bufattr_cpx
     0x8039dce0, // clock_ops
     0x800ac724, // copyin
-    0x800be58a, // bx_lr
+    0x800be58b, // bx_lr
     0x803e40d8, // vm_kernel_addrperm
     0x800385ed, // current_task
     0x80014c3d, // ipc_port_make_send
@@ -288,7 +288,7 @@ static addr_t S5L8950X_12B435[] =
     0x800c1305, // bufattr_cpx
     0x803a2ce0, // clock_ops
     0x800ae86c, // copyin
-    0x800c1306, // bx_lr
+    0x800c1307, // bx_lr
     0x803e9208, // vm_kernel_addrperm
     0x80038b95, // current_task
     0x80014e8d, // ipc_port_make_send
@@ -313,7 +313,7 @@ static addr_t S5L8940X_12B435[] =
     0x800be339, // bufattr_cpx
     0x8039cce0, // clock_ops
     0x800ac744, // copyin
-    0x800be33a, // bx_lr
+    0x800be33b, // bx_lr
     0x803e30d8, // vm_kernel_addrperm
     0x80038499, // current_task
     0x80014b9d, // ipc_port_make_send
@@ -341,7 +341,7 @@ static addr_t S5L8950X_12B410[] =
     0x800c12f5, // bufattr_cpx
     0x803a2ce0, // clock_ops
     0x800ae86c, // copyin
-    0x800c12f6, // bx_lr
+    0x800c12f7, // bx_lr
     0x803e91f8, // vm_kernel_addrperm
     0x80038b75, // current_task
     0x80014e69, // ipc_port_make_send
@@ -366,7 +366,7 @@ static addr_t S5L8940X_12B410[] =
     0x800be319, // bufattr_cpx
     0x8039cce0, // clock_ops
     0x800ac724, // copyin
-    0x800be31a, // bx_lr
+    0x800be31b, // bx_lr
     0x803e30c8, // vm_kernel_addrperm
     0x80038469, // current_task
     0x80014b79, // ipc_port_make_send
@@ -394,7 +394,7 @@ static addr_t S5L8950X_12A402[] =
     0x800c12f5, // bufattr_cpx
     0x803a2ce0, // clock_ops
     0x800ae86c, // copyin
-    0x800c12f6, // bx_lr
+    0x800c12f7, // bx_lr
     0x803e91f8, // vm_kernel_addrperm
     0x80038b69, // current_task
     0x80014e69, // ipc_port_make_send
@@ -419,7 +419,7 @@ static addr_t S5L8940X_12A402[] =
     0x800be319, // bufattr_cpx
     0x8039cce0, // clock_ops
     0x800ac724, // copyin
-    0x800be31a, // bx_lr
+    0x800be31b, // bx_lr
     0x803e30c8, // vm_kernel_addrperm
     0x80038455, // current_task
     0x80014b79, // ipc_port_make_send
@@ -446,7 +446,7 @@ static addr_t S5L8950X_12A365[] =
     0x800c12f5, // bufattr_cpx
     0x803a2ce0, // clock_ops
     0x800ae86c, // copyin
-    0x800c12f6, // bx_lr
+    0x800c12f7, // bx_lr
     0x803e91f8, // vm_kernel_addrperm
     0x80038b69, // current_task
     0x80014e69, // ipc_port_make_send
@@ -471,7 +471,7 @@ static addr_t S5L8940X_12A365[] =
     0x800be319, // bufattr_cpx
     0x8039cce0, // clock_ops
     0x800ac724, // copyin
-    0x800be31a, // bx_lr
+    0x800be31b, // bx_lr
     0x803e30c8, // vm_kernel_addrperm
     0x80038455, // current_task
     0x80014b79, // ipc_port_make_send
