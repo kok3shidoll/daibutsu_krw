@@ -8,6 +8,7 @@ LD_LIBS	?= -framework IOKit
 
 all:
 	$(CLANG) $(ARCH) $(C_FLAGS) $(LD_LIBS) *.c *.o -o test
+	strip test
 	ldid -Sent.xml test
 
 clean:

