@@ -18,7 +18,6 @@
 #define WRITE_IN(buf, data)         do { *(uint32_t *)(buf + bufpos) = (data); bufpos += 4; } while(0)
 
 #define KERN_POINTER_VALID(val)     ((val) >= 0x80000000 && (val) != 0xffffffff)
-#define PEXPLOIT_TO_UAF_PAYLOAD     (8)
 #define UAF_PAYLOAD_OFFSET          (0x20)
 
 extern kern_return_t io_service_open_extended(mach_port_t service, task_t owningTask, uint32_t connect_type, NDR_record_t ndr, io_buf_ptr_t properties, mach_msg_type_number_t propertiesCnt, kern_return_t *result, mach_port_t *connection);
@@ -37,7 +36,6 @@ static clock_serv_t clk_battery;
 static clock_serv_t clk_realtime;
 static uint32_t pipebuf = 0;
 static uint32_t cpipe = 0;
-static unsigned char pExploit[128];
 
 static vm_offset_t vm_kernel_addrperm = 0;
 
@@ -45,7 +43,7 @@ static uint32_t current_task_func = 0;
 static uint32_t ipc_port_make_send_func = 0;
 static uint32_t ipc_port_copyout_send_func = 0;
 
-static mach_port_t tfp0 = 0;
+mach_port_t tfp0 = 0;
 
 static unsigned char clock_ops_backup[] = {
     0x00, 0x00, 0x00, 0x00, // [00] rtclock.getattr
